@@ -2,6 +2,7 @@ import os
 import math
 import urllib.request
 import cv2
+import numpy as np
 import mediapipe as mp
 from pycaw.pycaw import AudioUtilities
 import screen_brightness_control as sbc
@@ -10,9 +11,26 @@ import keyboard
 MODEL_PATH = "hand_landmarker.task"
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 HAND_CONNECTIONS = mp.tasks.vision.HandLandmarksConnections.HAND_CONNECTIONS
-ACCENT_COLOR = (255, 140, 0)
+
+# Cyberpunk landmark gradient: Ocean Night -> Neon Purple -> Toxic Amber (BGR order for cv2)
+OCEAN_NIGHT_BGR = (43, 15, 11)     # #0B0F2B
+NEON_PURPLE_BGR = (255, 108, 188)  # #BC6CFF
+TOXIC_AMBER_BGR = (30, 138, 255)   # #FF8A1E
+LANDMARK_GRADIENT = [OCEAN_NIGHT_BGR, NEON_PURPLE_BGR, TOXIC_AMBER_BGR]
+
 LINE_THICKNESS = 2
-DOT_RADIUS = 4
+DOT_RADIUS = 2.5
+
+def _lerp_color(c1, c2, t):
+    return tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
+
+def _gradient_color(t, stops):
+    t = max(0.0, min(1.0, t))
+    segments = len(stops) - 1
+    scaled = t * segments
+    idx = min(int(scaled), segments - 1)
+    local_t = scaled - idx
+    return _lerp_color(stops[idx], stops[idx + 1], local_t)
 
 class HandTracker:
     def __init__(self, max_hands=2):
@@ -43,14 +61,19 @@ class HandTracker:
         return points
 
     def draw_landmarks(self, frame, points):
+        num_points = len(points)
         for connection in HAND_CONNECTIONS:
             start_point = tuple(int(v) for v in points[connection.start])
             end_point = tuple(int(v) for v in points[connection.end])
-            cv2.line(frame, start_point, end_point, color=ACCENT_COLOR, thickness=int(LINE_THICKNESS), lineType=cv2.LINE_AA)
+            t = connection.start / max(num_points - 1, 1)
+            color = _gradient_color(t, LANDMARK_GRADIENT)
+            cv2.line(frame, start_point, end_point, color=color, thickness=int(LINE_THICKNESS), lineType=cv2.LINE_AA)
 
-        for point in points:
+        for i, point in enumerate(points):
             point = tuple(int(v) for v in point)
-            cv2.circle(frame, point, int(DOT_RADIUS), color=ACCENT_COLOR, thickness=-1, lineType=cv2.LINE_AA)
+            t = i / max(num_points - 1, 1)
+            color = _gradient_color(t, LANDMARK_GRADIENT)
+            cv2.circle(frame, point, int(DOT_RADIUS), color=color, thickness=-1, lineType=cv2.LINE_AA)
 
 
 FINGER_TIPS = [4, 8, 12, 16, 20]
