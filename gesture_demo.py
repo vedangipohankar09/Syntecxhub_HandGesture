@@ -18,21 +18,24 @@ for path in FONT_PATHS:
 if text_font is None:
     text_font = ImageFont.load_default()
 
-ACCENT_RGB = (255, 140, 0)
-WHITE_RGB = (240, 240, 240)
+# Cyberpunk 4-color palette (neon cyan / neon magenta / electric purple / neon yellow)
+ACCENT_RGB = (255, 0, 200)      # Neon magenta - "Action" text + progress bar fill
+WHITE_RGB = (255, 211, 0)       # Neon yellow - "Gesture" text
+PANEL_BG_BGR = (40, 10, 30)     # Electric purple - HUD panel background (BGR for cv2)
+BAR_BG_BGR = (60, 20, 50)       # Muted purple - progress bar track (BGR for cv2)
 PANEL_X, PANEL_Y = 10, 10
 PANEL_W, PANEL_H = 220, 75
 
 def draw_hud(frame, gesture, action, progress):
     overlay = frame.copy()
-    cv2.rectangle(overlay, (PANEL_X, PANEL_Y), (PANEL_X + PANEL_W, PANEL_Y + PANEL_H), color=(20, 20, 20), thickness=-1)
+    cv2.rectangle(overlay, (PANEL_X, PANEL_Y), (PANEL_X + PANEL_W, PANEL_Y + PANEL_H), color=PANEL_BG_BGR, thickness=-1)
     frame = cv2.addWeighted(overlay, 0.5, frame, 0.5, 0)
 
     bar_x = PANEL_X + 12
     bar_y = PANEL_Y + 58
     bar_w = PANEL_W - 24
     bar_fill = int(bar_w * progress)
-    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + 3), color=(60, 60, 60), thickness=-1)
+    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + 3), color=BAR_BG_BGR, thickness=-1)
     cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_fill, bar_y + 3), color=ACCENT_RGB[::-1], thickness=-1)
 
     pil_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
