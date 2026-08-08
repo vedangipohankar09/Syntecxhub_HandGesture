@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageFont
 from gesture_core import HandTracker, classify_gesture, gesture_to_action, ACTION_FUNCTIONS
 
 HOLD_SECONDS = 1.2
-FONT_SIZE = 12
+FONT_SIZE = 14
 FONT_PATHS = ["C:/Windows/Fonts/times.ttf", "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"]
 
 text_font = None
@@ -18,17 +18,28 @@ for path in FONT_PATHS:
 if text_font is None:
     text_font = ImageFont.load_default()
 
-# Cyberpunk 4-color palette (neon cyan / neon magenta / electric purple / neon yellow)
-ACCENT_RGB = (255, 0, 200)      # Neon magenta - "Action" text + progress bar fill
-WHITE_RGB = (255, 211, 0)       # Neon yellow - "Gesture" text
-PANEL_BG_BGR = (40, 10, 30)     # Electric purple - HUD panel background (BGR for cv2)
-BAR_BG_BGR = (60, 20, 50)       # Muted purple - progress bar track (BGR for cv2)
+# Cyberpunk palette
+ACCENT_RGB = (0, 240, 255)      # Vice Cyan #00F0FF - "Action" text + progress bar fill
+WHITE_RGB = (255, 87, 34)       # Ember Glow (red+orange) - "Gesture" text
+ARCTIC_CYAN_BGR = (238, 238, 175)  # Arctic Ice Cyan #AFEEEE (BGR) - panel gradient start
+PANEL_WHITE_BGR = (255, 255, 255)  # White - panel gradient end
+BAR_BG_BGR = (220, 220, 190)       # Muted arctic cyan - progress bar track (BGR for cv2)
 PANEL_X, PANEL_Y = 10, 10
 PANEL_W, PANEL_H = 220, 75
 
+def _make_gradient_panel(width, height, color_start_bgr, color_end_bgr):
+    grad = np.linspace(0, 1, height, dtype=np.float32).reshape(height, 1, 1)
+    start = np.array(color_start_bgr, dtype=np.float32).reshape(1, 1, 3)
+    end = np.array(color_end_bgr, dtype=np.float32).reshape(1, 1, 3)
+    panel = start * (1 - grad) + end * grad
+    panel = np.tile(panel, (1, width, 1)).astype(np.uint8)
+    return panel
+
+PANEL_GRADIENT = _make_gradient_panel(PANEL_W, PANEL_H, ARCTIC_CYAN_BGR, PANEL_WHITE_BGR)
+
 def draw_hud(frame, gesture, action, progress):
     overlay = frame.copy()
-    cv2.rectangle(overlay, (PANEL_X, PANEL_Y), (PANEL_X + PANEL_W, PANEL_Y + PANEL_H), color=PANEL_BG_BGR, thickness=-1)
+    overlay[PANEL_Y:PANEL_Y + PANEL_H, PANEL_X:PANEL_X + PANEL_W] = PANEL_GRADIENT
     frame = cv2.addWeighted(overlay, 0.5, frame, 0.5, 0)
 
     bar_x = PANEL_X + 12
