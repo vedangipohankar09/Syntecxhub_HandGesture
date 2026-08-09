@@ -12,14 +12,17 @@ MODEL_PATH = "hand_landmarker.task"
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 HAND_CONNECTIONS = mp.tasks.vision.HandLandmarksConnections.HAND_CONNECTIONS
 
-# Cyberpunk landmark gradient: Ocean Night -> Neon Purple -> Toxic Amber (BGR order for cv2)
-OCEAN_NIGHT_BGR = (43, 15, 11)     # #0B0F2B
-NEON_PURPLE_BGR = (255, 108, 188)  # #BC6CFF
-TOXIC_AMBER_BGR = (30, 138, 255)   # #FF8A1E
-LANDMARK_GRADIENT = [OCEAN_NIGHT_BGR, NEON_PURPLE_BGR, TOXIC_AMBER_BGR]
+# Cyberpunk landmark gradient: Icy Blue -> Purple -> Orange -> Red (BGR order for cv2)
+ICY_BLUE_BGR = (247, 195, 79)   # #4FC3F7
+PURPLE_BGR = (182, 89, 155)     # #9B59B6
+ORANGE_BGR = (66, 140, 255)     # #FF8C42
+RED_BGR = (80, 57, 230)         # #E63950
+LANDMARK_GRADIENT = [ICY_BLUE_BGR, PURPLE_BGR, ORANGE_BGR, RED_BGR]
 
-LINE_THICKNESS = 2
-DOT_RADIUS = 2.5
+LINE_THICKNESS = 2      # base thickness reference (actual lines rendered at ~1.5px via supersampling below)
+MARKER_SIZE = 4
+MARKER_THICKNESS = 1    # hollow outline, unchanged
+SUPERSAMPLE = 2         # render lines at 2x then downscale for a smooth sub-pixel (~1.5px) look
 
 def _lerp_color(c1, c2, t):
     return tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
@@ -62,18 +65,33 @@ class HandTracker:
 
     def draw_landmarks(self, frame, points):
         num_points = len(points)
+
+        # --- Thin faint connecting lines (constellation feel) ---
+        line_layer = np.zeros_like(frame)
         for connection in HAND_CONNECTIONS:
             start_point = tuple(int(v) for v in points[connection.start])
             end_point = tuple(int(v) for v in points[connection.end])
-            t = connection.start / max(num_points - 1, 1)
-            color = _gradient_color(t, LANDMARK_GRADIENT)
-            cv2.line(frame, start_point, end_point, color=color, thickness=int(LINE_THICKNESS), lineType=cv2.LINE_AA)
+            cv2.line(line_layer, start_point, end_point, color=(200, 200, 200), thickness=1, lineType=cv2.LINE_AA)
+        cv2.addWeighted(line_layer, 0.35, frame, 1.0, 0, dst=frame)
 
+        # --- Soft glowing sparkle points on top ---
+        glow_layer = np.zeros_like(frame)
         for i, point in enumerate(points):
             point = tuple(int(v) for v in point)
             t = i / max(num_points - 1, 1)
             color = _gradient_color(t, LANDMARK_GRADIENT)
-            cv2.circle(frame, point, int(DOT_RADIUS), color=color, thickness=-1, lineType=cv2.LINE_AA)
+            cv2.circle(glow_layer, point, 5, color=color, thickness=-1, lineType=cv2.LINE_AA)
+        glow_layer = cv2.GaussianBlur(glow_layer, (0, 0), 3)
+        cv2.add(frame, glow_layer, dst=frame)
+
+        for i, point in enumerate(points):
+            point = tuple(int(v) for v in point)
+            # bright near-white core
+            cv2.circle(frame, point, 2, color=(245, 245, 245), thickness=-1, lineType=cv2.LINE_AA)
+            # tiny 4-point sparkle cross on every 3rd joint for extra twinkle
+            if i % 3 == 0:
+                cv2.line(frame, (point[0] - 6, point[1]), (point[0] + 6, point[1]), (255, 255, 255), 1, cv2.LINE_AA)
+                cv2.line(frame, (point[0], point[1] - 6), (point[0], point[1] + 6), (255, 255, 255), 1, cv2.LINE_AA)
 
 
 FINGER_TIPS = [4, 8, 12, 16, 20]
@@ -133,26 +151,39 @@ def gesture_to_action(gesture):
 speaker = AudioUtilities.GetSpeakers()
 volume_interface = speaker.EndpointVolume
 
+def get_current_volume():
+    return round(volume_interface.GetMasterVolumeLevelScalar() * 100)
+
+def get_current_brightness():
+    return sbc.get_brightness()[0]
+
 def volume_up():
     current = volume_interface.GetMasterVolumeLevelScalar()
     new_level = min(current + 0.05, 1.0)
     volume_interface.SetMasterVolumeLevelScalar(new_level, None)
+    return round(new_level * 100)
 
 def volume_down():
     current = volume_interface.GetMasterVolumeLevelScalar()
     new_level = max(current - 0.05, 0.0)
     volume_interface.SetMasterVolumeLevelScalar(new_level, None)
+    return round(new_level * 100)
 
 def brightness_up():
     current = sbc.get_brightness()[0]
-    sbc.set_brightness(min(current + 10, 100))
+    new_level = min(current + 10, 100)
+    sbc.set_brightness(new_level)
+    return new_level
 
 def brightness_down():
     current = sbc.get_brightness()[0]
-    sbc.set_brightness(max(current - 10, 0))
+    new_level = max(current - 10, 0)
+    sbc.set_brightness(new_level)
+    return new_level
 
 def toggle_play_pause():
     keyboard.send("play/pause media")
+    return None
 
 ACTION_FUNCTIONS = {
     "Volume Up": volume_up,
